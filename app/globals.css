@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        /* Forest & Mint Palette (Based on Screenshot) */
+
+        /* Background: Pure White */
+        --background: 0 0% 100%;
+        --foreground: 164 60% 15%;
+        /* Deep Forest Green Text */
+
+        --card: 0 0% 100%;
+        --card-foreground: 164 60% 15%;
+
+        --popover: 0 0% 100%;
+        --popover-foreground: 164 60% 15%;
+
+        /* Primary: Deep Forest Green (Hero BG) */
+        --primary: 166 72% 18%;
+        /* #0d4f3c approx */
+        --primary-foreground: 0 0% 100%;
+
+        /* Secondary: Light Mint (Active Nav Pill) */
+        --secondary: 160 60% 95%;
+        --secondary-foreground: 166 72% 18%;
+
+        /* Muted: Light Grey/Green */
+        --muted: 160 20% 96%;
+        --muted-foreground: 164 20% 40%;
+
+        /* Accent: Heart/Alert Red */
+        --accent: 350 80% 60%;
+        --accent-foreground: 0 0% 100%;
+
+        /* Destructive */
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 0 0% 98%;
+
+        --border: 160 20% 92%;
+        --input: 160 20% 92%;
+        --ring: 166 72% 18%;
+
+        --radius: 0.75rem;
+        /* Slightly tighter radius like the screenshot */
+    }
+
+    .dark {
+        --background: 164 60% 5%;
+        --foreground: 160 20% 96%;
+
+        --card: 164 60% 8%;
+        --card-foreground: 160 20% 96%;
+
+        --popover: 164 60% 8%;
+        --popover-foreground: 160 20% 96%;
+
+        --primary: 160 60% 45%;
+        --primary-foreground: 164 60% 5%;
+
+        --secondary: 164 40% 20%;
+        --secondary-foreground: 160 20% 96%;
+
+        --muted: 164 40% 20%;
+        --muted-foreground: 160 20% 70%;
+
+        --accent: 350 80% 60%;
+        --accent-foreground: 0 0% 100%;
+
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 0 0% 98%;
+
+        --border: 164 40% 20%;
+        --input: 164 40% 20%;
+        --ring: 160 60% 45%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* Custom Pattern for Hero */
+.hero-pattern {
+    background-color: hsl(var(--primary));
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
