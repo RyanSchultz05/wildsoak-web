@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
-import { Droplets, Map as MapIcon, Heart, User as UserIcon, LogOut } from 'lucide-react'
+import { Droplets, Map as MapIcon, Heart, User as UserIcon, LogOut, Navigation } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -81,6 +81,15 @@ export default function Navbar() {
                             Map View
                         </Button>
                     </Link>
+                    <Link href="/road-trip">
+                        <Button
+                            variant="ghost"
+                            className={`rounded-full px-6 font-medium ${pathname === '/road-trip' ? 'bg-secondary text-primary hover:bg-secondary/80' : 'text-stone-500 hover:text-primary hover:bg-stone-50'}`}
+                        >
+                            <Navigation className="w-4 h-4 mr-2" />
+                            Road Trip
+                        </Button>
+                    </Link>
 
                 </div>
 
@@ -127,6 +136,25 @@ export default function Navbar() {
                         </Link>
                     )}
                 </div>
+            </div>
+
+            {/* Phone navigation: the center links don't fit beside the logo, so they get their own row. */}
+            <div className="container mx-auto mt-3 flex items-center gap-2 overflow-x-auto px-6 md:hidden" aria-label="Sections">
+                {[
+                    { href: '/', label: 'Explore', icon: Droplets },
+                    { href: '/explore', label: 'Map', icon: MapIcon },
+                    { href: '/road-trip', label: 'Road Trip', icon: Navigation },
+                ].map(({ href, label, icon: Icon }) => (
+                    <Link
+                        key={href}
+                        href={href}
+                        aria-current={pathname === href ? 'page' : undefined}
+                        className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${pathname === href ? 'bg-secondary text-primary' : 'text-stone-500 hover:bg-stone-50 hover:text-primary'}`}
+                    >
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                        {label}
+                    </Link>
+                ))}
             </div>
         </nav>
     )

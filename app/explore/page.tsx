@@ -11,8 +11,8 @@ import { Button } from '@/components/ui/button'
 import type { FeatureCollection } from 'geojson'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { displayName, fahrenheit } from '@/lib/springs'
 
-// Premium Map Style (CartoDB Voyager)
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
 
 type TempCategory = 'hot' | 'warm' | 'cool' | 'unknown'
@@ -269,7 +269,7 @@ function ExplorePageContent() {
                                 {selectedSpring.hero_image_url ? (
                                     <img
                                         src={selectedSpring.hero_image_url}
-                                        alt={selectedSpring.name}
+                                        alt={displayName(selectedSpring.name)}
                                         className="w-full h-full object-cover"
                                     />
                                 ) : (
@@ -278,12 +278,12 @@ function ExplorePageContent() {
                                     </div>
                                 )}
                                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-xs font-bold text-slate-900 shadow-sm">
-                                    {selectedSpring.water_temperature_c ? `${selectedSpring.water_temperature_c}°C` : 'N/A'}
+                                    {selectedSpring.water_temperature_c !== null ? `${fahrenheit(selectedSpring.water_temperature_c)}°F` : 'Not reported'}
                                 </div>
                             </div>
 
                             <div className="p-5 bg-white">
-                                <h3 className="font-bold text-slate-900 text-lg mb-1 leading-tight">{selectedSpring.name}</h3>
+                                <h3 className="font-bold text-slate-900 text-lg mb-1 leading-tight">{displayName(selectedSpring.name)}</h3>
                                 <div className="flex items-center text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
                                     <MapPin className="w-3 h-3 mr-1" />
                                     {selectedSpring.state || 'Unknown'}
@@ -342,9 +342,9 @@ function ExplorePageContent() {
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Temperature</label>
                                 {[
-                                    { id: 'hot', label: 'Hot (≥40°C)', color: 'bg-red-100 text-red-700' },
-                                    { id: 'warm', label: 'Warm (30-39°C)', color: 'bg-orange-100 text-orange-700' },
-                                    { id: 'cool', label: 'Cool (<30°C)', color: 'bg-blue-100 text-blue-700' },
+                                    { id: 'hot', label: 'Hot (104°F and up)', color: 'bg-red-100 text-red-700' },
+                                    { id: 'warm', label: 'Warm (86–103°F)', color: 'bg-orange-100 text-orange-700' },
+                                    { id: 'cool', label: 'Cool (under 86°F)', color: 'bg-blue-100 text-blue-700' },
                                     { id: 'unknown', label: 'Unknown', color: 'bg-slate-100 text-slate-600' }
                                 ].map((temp) => (
                                     <button

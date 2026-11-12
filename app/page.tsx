@@ -1,181 +1,208 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { HotSpring } from '@/types'
 import Link from 'next/link'
-import { MapPin, Thermometer, Heart, Search, Mountain, Tent, Accessibility, Footprints, Star } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search, Map as MapIcon, Navigation } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import type { HotSpring } from '@/types'
+import SpringCard from '@/components/SpringCard'
+import { photoUrl } from '@/lib/springs'
+
+const STATES: Record<string, string> = {
+  alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', florida: 'FL',
+  georgia: 'GA', hawaii: 'HI', idaho: 'ID', massachusetts: 'MA', montana: 'MT', nevada: 'NV',
+  'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', oregon: 'OR', 'south dakota': 'SD',
+  texas: 'TX', utah: 'UT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wyoming: 'WY',
+}
+
+const POPULAR_STATES = ['Oregon', 'Idaho', 'California', 'Nevada', 'Wyoming', 'Utah', 'Montana', 'Colorado', 'New Mexico', 'Washington']
+
+type ReviewJoin = { rating: number; status?: string; review_photos?: { storage_path: string }[] }
+type SpringRow = HotSpring & { spring_reviews?: ReviewJoin[] }
+
+/** Adds the average rating, review count and first review photo to a spring row. */
+function withReviewSummary(row: SpringRow): HotSpring {
+  const reviews = (row.spring_reviews || []).filter((review) => !review.status || review.status === 'approved')
+  const ratings = reviews.map((review) => review.rating)
+  const photo = reviews.flatMap((review) => review.review_photos || [])[0]
+  const { spring_reviews: _unused, ...spring } = row
+  void _unused
+  return {
+    ...spring,
+    average_rating: ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : 0,
+    review_count: ratings.length,
+    hero_image_url: spring.hero_image_url || (photo ? photoUrl(photo.storage_path) : null),
+  }
+}
+
+const SPRING_SELECT = '*, spring_reviews(rating, status, review_photos(storage_path))'
 
 export default function Home() {
   const [springs, setSprings] = useState<HotSpring[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Fetch springs (featured or search results)
-  useEffect(() => {
-    const fetchSprings = async () => {
-      setLoading(true)
-      let query = supabase
-        .from('hot_springs')
-        .select('*, spring_reviews(rating)')
+  const query = searchQuery.trim()
 
-      if (searchQuery) {
-        query = query.or(`name.ilike.%${searchQuery}%,state.ilike.%${searchQuery}%`)
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      setFailed(false)
+
+      let rows: SpringRow[] = []
+      let error: unknown = null
+
+      if (query.length >= 2) {
+        const pattern = query.replace(/[,()*"\\%]/g, ' ').trim()
+        const stateCode = STATES[pattern.toLowerCase()] || (pattern.length === 2 ? pattern.toUpperCase() : null)
+        const filters = [`name.ilike.%${pattern}%`]
+        if (stateCode && Object.values(STATES).includes(stateCode)) filters.push(`state.eq.${stateCode}`)
+        const result = await supabase.from('hot_springs').select(SPRING_SELECT).or(filters.join(',')).order('name').limit(60)
+        rows = (result.data as SpringRow[]) || []
+        error = result.error
       } else {
-        // If no search, just get some featured ones (we'll sort by rating later)
-        // We fetch more to ensure we have enough high-rated ones after client-side sort
-        query = query.limit(20)
+        // Top rated: every spring that has at least one published review.
+        const reviewed = await supabase.from('spring_reviews').select('spring_id').eq('status', 'approved')
+        const ids = Array.from(new Set((reviewed.data || []).map((review) => review.spring_id as string)))
+        if (reviewed.error) {
+          error = reviewed.error
+        } else if (ids.length) {
+          const result = await supabase.from('hot_springs').select(SPRING_SELECT).in('id', ids)
+          rows = (result.data as SpringRow[]) || []
+          error = result.error
+        }
       }
 
-      const { data, error } = await query
-
+      if (cancelled) return
       if (error) {
-        console.error('Error fetching springs:', error)
+        setFailed(true)
+        setSprings([])
       } else {
-        // Calculate average rating and sort
-        const springsWithRating = data.map((spring: any) => {
-          const ratings = spring.spring_reviews?.map((r: any) => r.rating) || []
-          const avg = ratings.length > 0
-            ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
-            : 0
-          return { ...spring, average_rating: avg }
-        })
-
-        // Sort by rating (desc) then by name
-        const sorted = springsWithRating.sort((a, b) => {
-          if (b.average_rating !== a.average_rating) {
-            return b.average_rating - a.average_rating
-          }
-          return a.name.localeCompare(b.name)
-        })
-
-        setSprings(sorted.slice(0, searchQuery ? 50 : 6))
+        const summarized = rows.map(withReviewSummary)
+        if (query.length < 2) {
+          summarized.sort(
+            (a, b) =>
+              Number(!!b.hero_image_url) - Number(!!a.hero_image_url) ||
+              (b.average_rating || 0) - (a.average_rating || 0) ||
+              (b.review_count || 0) - (a.review_count || 0) ||
+              a.name.localeCompare(b.name),
+          )
+        }
+        setSprings(query.length < 2 ? summarized.slice(0, 9) : summarized)
       }
       setLoading(false)
     }
 
-    // Debounce search
-    const timeoutId = setTimeout(() => {
-      fetchSprings()
-    }, 500)
+    const timeout = setTimeout(load, query ? 350 : 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+    }
+  }, [query])
 
-    return () => clearTimeout(timeoutId)
-  }, [searchQuery])
+  const searching = query.length >= 2
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <div className="hero-pattern py-32 px-4 text-center relative overflow-hidden">
-        <div className="relative z-10 max-w-4xl mx-auto space-y-8">
-          <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tight">
-            Find Your Primitive Paradise
-          </h1>
-          <p className="text-xl text-white/80 font-medium max-w-2xl mx-auto">
-            Discover, rate, and preserve natural hot springs across America.
+      <section className="hero-pattern px-4 pb-24 pt-28 text-center md:pt-36">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="text-5xl font-bold tracking-tight text-white md:text-7xl">Find your kind of quiet.</h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg font-medium text-white/80 md:text-xl">
+            More than 1,500 hot springs across the United States, with what to know before you go.
           </p>
 
-          <div className="pt-8 max-w-2xl mx-auto w-full">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                <Search className="h-6 w-6 text-stone-400" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-16 pr-6 py-5 bg-white rounded-full text-stone-900 placeholder-stone-400 focus:ring-4 focus:ring-white/20 focus:outline-none shadow-xl text-lg font-medium"
-                placeholder="Search by name or state (e.g., 'Oregon')"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+          <form className="relative mx-auto mt-10 max-w-2xl" role="search" onSubmit={(event) => event.preventDefault()}>
+            <label htmlFor="spring-search" className="sr-only">Search springs by name or state</label>
+            <Search className="pointer-events-none absolute left-6 top-1/2 h-6 w-6 -translate-y-1/2 text-stone-400" aria-hidden="true" />
+            <input
+              id="spring-search"
+              type="search"
+              autoComplete="off"
+              className="block w-full rounded-full bg-white py-5 pl-16 pr-6 text-lg font-medium text-stone-900 shadow-xl placeholder:text-stone-400 focus:outline-none focus:ring-4 focus:ring-white/30"
+              placeholder="Search by name or state"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </form>
 
-            <div className="flex items-center justify-center gap-8 mt-8 text-white/70 font-medium text-sm">
-              <button className="flex items-center gap-2 hover:text-white transition-colors">
-                <Tent className="w-4 h-4" /> Primitive
-              </button>
-              <button className="flex items-center gap-2 hover:text-white transition-colors">
-                <Accessibility className="w-4 h-4" /> Accessible
-              </button>
-              <button className="flex items-center gap-2 hover:text-white transition-colors">
-                <Footprints className="w-4 h-4" /> Hike-in
-              </button>
-            </div>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/explore"
+              className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
+            >
+              <MapIcon className="h-4 w-4" aria-hidden="true" /> Browse the map
+            </Link>
+            <Link
+              href="/road-trip"
+              className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
+            >
+              <Navigation className="h-4 w-4" aria-hidden="true" /> Plan a road trip
+            </Link>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Content Grid */}
-      <div className="container mx-auto px-6 py-16">
-        <div className="flex items-end justify-between mb-10">
-          <h2 className="text-3xl font-bold text-stone-900">
-            Popular Soaks
-          </h2>
-          <p className="text-stone-500 font-medium">
-            {springs.length} locations found
-          </p>
+      <section className="container mx-auto px-6 py-16">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold text-stone-900">{searching ? 'Search results' : 'Top rated'}</h2>
+            <p className="mt-1 font-medium text-stone-500">
+              {searching ? `Springs matching “${query}”` : 'Favorites from people who’ve been'}
+            </p>
+          </div>
+          {searching && !loading && !failed && (
+            <p className="font-medium text-stone-500" aria-live="polite">
+              {springs.length === 60 ? 'First 60 matches' : `${springs.length} ${springs.length === 1 ? 'spring' : 'springs'}`}
+            </p>
+          )}
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-stone-100 rounded-2xl h-80 animate-pulse" />
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading springs">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="h-80 animate-pulse rounded-3xl bg-stone-100" />
             ))}
           </div>
+        ) : failed ? (
+          <p className="rounded-3xl bg-stone-50 p-10 text-center text-stone-600">
+            Springs couldn’t be loaded. Check your connection and refresh the page.
+          </p>
+        ) : springs.length === 0 ? (
+          <p className="rounded-3xl bg-stone-50 p-10 text-center text-stone-600">
+            {searching ? 'No springs match that search. Try a shorter name or a state.' : 'No reviewed springs yet.'}
+          </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {springs.map((spring) => (
-              <Link href={`/springs/${spring.id}`} key={spring.id} className="group block h-full">
-                <div className="relative h-80 rounded-2xl overflow-hidden bg-[#2d5a4c] shadow-sm hover:shadow-xl transition-all duration-300 group-hover:-translate-y-1">
-                  {/* Image or Placeholder */}
-                  {spring.hero_image_url ? (
-                    <img
-                      src={spring.hero_image_url}
-                      alt={spring.name}
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center opacity-20">
-                      <Mountain className="w-32 h-32 text-white" strokeWidth={1} />
-                    </div>
-                  )}
-
-                  {/* Overlay Gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-
-                  {/* Favorite Button */}
-                  <button className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center text-stone-300 hover:text-red-500 transition-colors shadow-md">
-                    <Heart className="w-5 h-5 fill-current" />
-                  </button>
-
-                  {/* Content Overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                    <h3 className="text-2xl font-bold mb-1 text-shadow-sm">{spring.name}</h3>
-                    <div className="flex items-center text-sm font-medium opacity-90 mb-4">
-                      <MapPin className="w-4 h-4 mr-1" />
-                      {spring.state}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {spring.water_temperature_c && (
-                        <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 border border-white/10">
-                          <Thermometer className="w-4 h-4" />
-                          {Math.round(spring.water_temperature_c * 9 / 5 + 32)}°F
-                        </div>
-                      )}
-                      {(spring.average_rating || 0) > 0 && (
-                        <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 border border-white/10 text-amber-400">
-                          <Star className="w-4 h-4 fill-current" />
-                          {(spring.average_rating || 0).toFixed(1)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Link>
+              <SpringCard key={spring.id} spring={spring} />
             ))}
           </div>
         )}
-      </div>
+      </section>
+
+      {!searching && (
+        <section className="container mx-auto px-6 pb-20">
+          <h2 className="text-2xl font-bold text-stone-900">Browse by state</h2>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {POPULAR_STATES.map((state) => (
+              <button
+                key={state}
+                type="button"
+                onClick={() => {
+                  setSearchQuery(state)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                className="rounded-full bg-stone-100 px-5 py-2.5 text-sm font-semibold text-stone-700 transition-colors hover:bg-secondary hover:text-primary"
+              >
+                {state}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

@@ -17,6 +17,9 @@ export interface HotSpring {
     updated_at: string | null
     hero_image_url: string | null
     average_rating?: number
+    review_count?: number
+    county?: string | null
+    info_confidence?: 'documented' | 'inferred' | null
 }
 
 export interface Review {

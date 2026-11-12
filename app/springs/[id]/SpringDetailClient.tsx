@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { HotSpring, Review } from '@/types'
 import { useParams } from 'next/navigation'
-import { MapPin, Thermometer, Navigation, Star, ArrowLeft, Info, Calendar, Mountain, Pencil } from 'lucide-react'
+import { MapPin, Thermometer, Navigation, Star, ArrowLeft, Info, Calendar, Mountain, Pencil, HelpCircle, Footprints } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { RichText } from '@/components/RichText'
 import ReviewComposer from '@/components/ReviewComposer'
 import { User } from '@supabase/supabase-js'
+import SpringArtwork from '@/components/SpringArtwork'
+import { directionsUrl, displayName, fahrenheit, isUnconfirmed, photoUrl, placeLabel, temperatureCategory } from '@/lib/springs'
 
 export default function SpringDetailClient() {
     const { id } = useParams()
@@ -88,63 +90,93 @@ export default function SpringDetailClient() {
         )
     }
 
-    if (!spring) return null
+    if (!spring) {
+        return (
+            <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 px-6 text-center">
+                <h1 className="text-2xl font-bold text-slate-900">Spring not found</h1>
+                <p className="text-slate-600">This spring may have been removed, or the link is incomplete.</p>
+                <Link href="/" className="font-semibold text-primary underline">Back to all springs</Link>
+            </div>
+        )
+    }
+
+    const name = displayName(spring.name)
+    const place = placeLabel(spring)
+    const unconfirmed = isUnconfirmed(spring)
+    const approved = reviews.filter((review) => (review as Review & { status?: string }).status !== 'rejected')
+    const firstPhoto = approved.flatMap((review) => review.photos || [])[0]
+    const heroUrl = spring.hero_image_url || (firstPhoto ? firstPhoto.public_url || photoUrl(firstPhoto.storage_path) : null)
+    const averageRating = approved.length ? approved.reduce((sum, review) => sum + review.rating, 0) / approved.length : null
 
     return (
         <div className="min-h-screen bg-slate-50">
             {/* Hero Section */}
-            <div className="relative h-[65vh] min-h-[500px]">
-                {spring.hero_image_url ? (
-                    <img
-                        src={spring.hero_image_url}
-                        alt={spring.name}
-                        className="w-full h-full object-cover"
-                    />
+            <div className="relative">
+                <div className="relative h-[40vh] min-h-[280px] md:h-[65vh] md:min-h-[500px]">
+                {heroUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={heroUrl} alt={`Photo of ${name}`} className="h-full w-full object-cover" />
                 ) : (
-                    <div className="w-full h-full bg-slate-200 flex items-center justify-center">
-                        <Thermometer className="w-32 h-32 text-slate-300" />
-                    </div>
+                    <SpringArtwork
+                        seed={spring.id}
+                        category={temperatureCategory(spring.water_temperature_c)}
+                        shift={-0.13}
+                        className="h-full w-full"
+                    />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-slate-50" />
+                </div>
 
-                <div className="absolute top-24 left-8 z-20">
+                <div className="absolute left-4 top-4 z-20 md:left-8 md:top-24">
                     <Link href="/">
-                        <Button variant="secondary" size="icon" className="rounded-full w-12 h-12 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/10 transition-all">
+                        <Button variant="secondary" size="icon" aria-label="Back to all springs" className="rounded-full w-12 h-12 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/10 transition-all">
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                     </Link>
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 p-8 pb-16 container mx-auto">
+                <div className="container mx-auto px-6 pb-2 pt-6 md:absolute md:bottom-0 md:left-0 md:right-0 md:p-8 md:pb-16">
                     <div className="max-w-4xl">
                         <div className="flex items-center gap-3 mb-6">
-                            <span className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-xl text-white text-xs font-bold uppercase tracking-widest border border-white/20 shadow-sm">
+                            <span className="inline-flex items-center px-4 py-1.5 rounded-full bg-slate-900/70 backdrop-blur-xl text-white text-xs font-bold uppercase tracking-widest border border-white/20 shadow-sm">
                                 <MapPin className="w-3.5 h-3.5 mr-2" />
-                                {spring.state || 'Unknown Location'}
+                                {place || 'Location not listed'}
                             </span>
+                            {unconfirmed && (
+                                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-amber-800 shadow-sm">
+                                    <HelpCircle className="mr-2 h-3.5 w-3.5" />
+                                    Unconfirmed
+                                </span>
+                            )}
                         </div>
 
-                        <h1 className="text-5xl md:text-7xl font-bold text-slate-900 mb-8 tracking-tight drop-shadow-sm">
-                            {spring.name}
+                        <h1 className="text-4xl md:text-7xl font-bold text-slate-900 mb-6 md:mb-8 tracking-tight drop-shadow-sm">
+                            {name}
                         </h1>
 
-                        <div className="flex flex-wrap gap-6 text-slate-600 font-medium">
+                        <div className="flex flex-wrap gap-3 md:gap-6 text-slate-600 font-medium">
                             {spring.water_temperature_c && (
                                 <div className="flex items-center bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-white/40 transition-transform hover:scale-105">
                                     <Thermometer className="w-5 h-5 mr-3 text-primary" />
-                                    <span className="text-slate-900 font-bold">{spring.water_temperature_c}°C</span>
+                                    <span className="text-slate-900 font-bold">{fahrenheit(spring.water_temperature_c)}°F at the source</span>
                                 </div>
                             )}
-                            {spring.hike_distance_km !== null && (
+                            {averageRating !== null && (
+                                <div className="flex items-center bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-white/40">
+                                    <Star className="w-5 h-5 mr-3 text-amber-500 fill-amber-500" />
+                                    <span className="text-slate-900 font-bold">{averageRating.toFixed(1)} · {approved.length} review{approved.length === 1 ? '' : 's'}</span>
+                                </div>
+                            )}
+                            {spring.hike_distance_km !== null && spring.hike_distance_km > 0 && (
                                 <div className="flex items-center bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-white/40 transition-transform hover:scale-105">
-                                    <Navigation className="w-5 h-5 mr-3 text-primary" />
-                                    <span className="text-slate-900 font-bold">{spring.hike_distance_km}km Hike</span>
+                                    <Footprints className="w-5 h-5 mr-3 text-primary" />
+                                    <span className="text-slate-900 font-bold">{(spring.hike_distance_km * 0.621371).toFixed(1)} mi hike each way</span>
                                 </div>
                             )}
                             {spring.elevation_m !== null && (
                                 <div className="flex items-center bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-white/40 transition-transform hover:scale-105">
                                     <Mountain className="w-5 h-5 mr-3 text-primary" />
-                                    <span className="text-slate-900 font-bold">{spring.elevation_m}m Elev.</span>
+                                    <span className="text-slate-900 font-bold">{Math.round(spring.elevation_m * 3.28084).toLocaleString()} ft elevation</span>
                                 </div>
                             )}
                         </div>
@@ -152,17 +184,24 @@ export default function SpringDetailClient() {
                 </div>
             </div>
 
-            <div className="container mx-auto px-4 -mt-8 relative z-10 pb-24">
+            <div className="container mx-auto px-4 mt-8 md:-mt-8 relative z-10 pb-24">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
 
                     {/* Main Content */}
                     <div className="lg:col-span-8 space-y-16">
                         {/* About Section */}
-                        <section className="bg-white rounded-[2rem] p-10 shadow-xl shadow-slate-200/50 border border-white/50">
+                        <section className="bg-white rounded-[2rem] p-6 md:p-10 shadow-xl shadow-slate-200/50 border border-white/50">
                             <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center">
                                 <Info className="w-6 h-6 mr-3 text-primary" />
                                 About
                             </h2>
+                            {unconfirmed && (
+                                <p className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
+                                    <strong className="font-semibold">Details here are unconfirmed.</strong> This listing was written
+                                    from the spring’s map location and general knowledge of the area, not a documented visit. Treat
+                                    access, temperature and soaking details as a starting point and confirm locally.
+                                </p>
+                            )}
                             <div className="prose prose-lg prose-slate max-w-none">
                                 <RichText content={spring.description} />
                             </div>
@@ -170,7 +209,7 @@ export default function SpringDetailClient() {
                             {spring.access_notes && (
                                 <div className="mt-10 bg-slate-50 border border-slate-100 rounded-2xl p-8">
                                     <h3 className="font-bold text-slate-800 mb-3 flex items-center text-lg">
-                                        ⚠️ Access Information
+                                        Access information
                                     </h3>
                                     <p className="text-slate-600 leading-relaxed">{spring.access_notes}</p>
                                 </div>
@@ -263,8 +302,9 @@ export default function SpringDetailClient() {
                                                         {review.photos.map((photo) => (
                                                             <img
                                                                 key={photo.id}
-                                                                src={photo.public_url || `https://ventasuugmeocsmcoiqs.supabase.co/storage/v1/object/public/review-photos/${photo.storage_path}`}
-                                                                alt="Review photo"
+                                                                src={photo.public_url || photoUrl(photo.storage_path)}
+                                                                alt={`Photo from a review of ${name}`}
+                                                                loading="lazy"
                                                                 className="h-40 w-40 object-cover rounded-2xl cursor-pointer hover:opacity-90 transition-all hover:scale-105 shadow-md"
                                                             />
                                                         ))}
@@ -283,11 +323,6 @@ export default function SpringDetailClient() {
                         <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white/50 sticky top-28">
                             <h3 className="text-xl font-bold text-slate-900 mb-8">Location Details</h3>
 
-                            <div className="aspect-square bg-slate-100 rounded-3xl mb-8 flex items-center justify-center text-slate-400 border border-slate-200 overflow-hidden relative group">
-                                <MapPin className="w-12 h-12 text-slate-300 group-hover:text-primary transition-colors duration-500" />
-                                {/* Mini Map could go here */}
-                            </div>
-
                             <div className="space-y-5 text-sm">
                                 <div className="flex justify-between items-center py-4 border-b border-slate-50">
                                     <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Latitude</span>
@@ -299,13 +334,23 @@ export default function SpringDetailClient() {
                                 </div>
                                 <div className="flex justify-between items-center py-4 border-b border-slate-50">
                                     <span className="text-slate-500 font-bold uppercase tracking-widest text-xs">Elevation</span>
-                                    <span className="text-slate-900 font-bold">{spring.elevation_m ? `${spring.elevation_m} m` : 'N/A'}</span>
+                                    <span className="text-slate-900 font-bold">{spring.elevation_m !== null ? `${Math.round(spring.elevation_m * 3.28084).toLocaleString()} ft` : 'Not listed'}</span>
                                 </div>
                             </div>
 
-                            <Button className="w-full mt-10 bg-slate-900 hover:bg-primary text-white rounded-2xl py-7 text-lg shadow-xl shadow-slate-900/20 transition-all hover:shadow-primary/30">
+                            <a
+                                href={directionsUrl(spring)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-5 text-lg font-semibold text-white shadow-xl shadow-slate-900/20 transition-all hover:bg-primary"
+                            >
+                                <Navigation className="h-5 w-5" aria-hidden="true" />
                                 Get Directions
-                            </Button>
+                            </a>
+                            <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                                Directions go to the spring’s map pin. Remote roads can be slower than any app predicts, and
+                                some springs need a hike from the road.
+                            </p>
                         </div>
                     </div>
                 </div>
